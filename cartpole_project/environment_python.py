@@ -279,10 +279,19 @@ class Env(pygame.sprite.Sprite):
             pygame.display.flip()
 
 
+if __name__ == "__main__":
+    env = Env()
+    liste = []
+    t = 0
+    while True:
+        t += 1
+        print("Episode :" , t)
+        liste.append(env.total_reward)
+        # initiliaze pygame and create window
 
-# initiliaze pygame and create window
+        pygame.init()
+        screen = pygame.display.set_mode((width, height))
+        pygame.display.set_caption('RL Game')
+        clock = pygame.time.Clock()
 
-pygame.init()
-screen = pygame.display.set_mode((width, height))
-pygame.display.set_caption('RL Game')
-clock = pygame.time.Clock()
+        env.run()
