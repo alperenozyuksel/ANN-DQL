@@ -6,7 +6,7 @@ from keras.optimizers import Adam
 import random
 import numpy as np
 
-
+from rl import reward
 
 width = 360
 height = 360
@@ -38,13 +38,14 @@ class Player(pygame.sprite.Sprite):
 
 
 
-    def update(self):
+    def update(self, action):
+        self.speed_x = 0
         keystate = pygame.key.get_pressed()
 
-        if keystate[pygame.K_LEFT]:
+        if keystate[pygame.K_LEFT] or action == 0 :
             self.speed_x = -4
 
-        elif keystate[pygame.K_RIGHT]:
+        elif keystate[pygame.K_RIGHT] or action == 1:
             self.speed_x = 4
 
         else :
@@ -86,11 +87,14 @@ class Enemy(pygame.sprite.Sprite):
             self.rect.y = random.randrange(2, 6)
 
 
+    def getCoordinates(self):
+        return self.rect.x, self.rect.y
+
 class DQLAgent:
     def __init__(self, env):
         # Hiperparametreler
-        self.state_size = 4
-        self.action_size = 3
+        self.state_size = 4 # distance (playerx-m1x) (playerx-m2x)  (playerx-m1y)  (playerx-m2y)
+        self.action_size = 3 # right, left , stay
         self.gamma = 0.95  # Gelecek ödüllerin indirim oranı
         self.learning_rate = 0.001  # Öğrenme hızı
         self.epsilon = 1.0  # Keşif oranı
@@ -113,7 +117,12 @@ class DQLAgent:
 
     def act(self, state):
         """Ajanın, keşif mi yoksa sömürü mü yapacağına karar verir."""
-        pass
+        state = np.array(state)
+        if np.random.rand() <= self.epsilon:
+            return random.randrange(self.action_size)
+        act_values = self.model.predict(state)
+        return np.argmax(act_values[0])
+
 
     def replay(self, batch_size):
         """Modeli bellekteki deneyimlerle yeniden eğitir."""
@@ -133,6 +142,140 @@ class DQLAgent:
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
+class Env(pygame.sprite.Sprite):
+    def __init__(self):
+        pygame.sprite.Sprite.__init__(self)
+        self.all_sprite = pygame.sprite.Group()
+        self.enemy = pygame.sprite.Group()
+        self.player = Player()
+        self.all_sprite.add(self.player)
+        self.m1 = Enemy()
+        self.m2 = Enemy()
+        self.all_sprite.add(self.m1)
+        self.all_sprite.add(self.m2)
+        self.enemy.add(self.m1)
+        self.enemy.add(self.m2)
+
+        self.reward = 0
+        self.total_reward = 0
+        self.done = False
+        self.agent = DQLAgent()
+
+    def findDistance(self, x, y):
+
+        distance = x-y
+        return distance
+
+
+    # ajanı next stape'ye taşır
+    def step(self, action):
+        state_list = []
+
+        # playerı ve düşmanı ileri taşı
+        self.player.update(action)
+        self.enemy.update()
+
+        # koordinatları al
+
+        next_player_state = self.player.getCoordinates()
+        next_m1_state = self.m1.getCoordinates()
+        next_m2_state = self.m2.getCoordinates()
+
+
+        # uzaklığı bul
+
+        state_list.append(self.findDistance(next_player_state[0], next_m1_state[0]))
+        state_list.append(self.findDistance(next_player_state[1], next_m1_state[1]))
+        state_list.append(self.findDistance(next_player_state[0], next_m2_state[0]))
+        state_list.append(self.findDistance(next_player_state[1], next_m2_state[1]))
+
+        return [state_list]
+
+
+
+
+    # reset
+    def initialStates(self):
+
+        self.all_sprite = pygame.sprite.Group()
+        self.enemy = pygame.sprite.Group()
+        self.player = Player()
+        self.all_sprite.add(self.player)
+        self.m1 = Enemy()
+        self.m2 = Enemy()
+        self.all_sprite.add(self.m1)
+        self.all_sprite.add(self.m2)
+        self.enemy.add(self.m1)
+        self.enemy.add(self.m2)
+
+        self.reward = 0
+        self.total_reward = 0
+        self.done = False
+
+        state_list = []
+
+        player_state = self.player.getCoordinates()
+        m1_state = self.m1.getCoordinates()
+        m2_state = self.m2.getCoordinates()
+
+        # uzaklığı bul
+
+        state_list.append(self.findDistance(player_state[0], m1_state[0]))
+        state_list.append(self.findDistance(player_state[1], m1_state[1]))
+        state_list.append(self.findDistance(player_state[0], m2_state[0]))
+        state_list.append(self.findDistance(player_state[1], m2_state[1]))
+
+        return [state_list]
+
+
+    def run(self):
+        # game loop
+        self.reward = 2
+        state = self.initialStates()
+
+        running = True
+        while running:
+            # keep loop running at the right speed
+            clock.tick(fps)
+
+            # procces input
+            for event in pygame.event.get():
+
+                if event.type == pygame.QUIT:
+                    running = False
+
+            # update
+            action = self.agent.act(state)
+            next_state = self.step(action)
+            self.total_reward += self.reward
+
+            hits = pygame.sprite.spritecollide(self.player, self.enemy, False, pygame.sprite.collide_rect)
+            if hits:
+                self.reward = -150
+                self.total_reward += self.reward
+                self.done = True
+                running = False
+                print("Total reward: ", self.total_reward)
+
+            # storage
+            self.agent.remember(state,action,self.reward, next_state,self.done)
+
+            # update next state
+            state = next_state
+
+            # training
+            self.agent.replay(batch_size=24)
+
+            # epsilon greedy
+            self.agent.update_epsilon()
+
+
+            # draw / render (show)
+            screen.fill(white)
+            self.all_sprite.draw(screen)
+            # after drawing flip display
+            pygame.display.flip()
+
 
 
 # initiliaze pygame and create window
@@ -142,48 +285,7 @@ screen = pygame.display.set_mode((width, height))
 pygame.display.set_caption('RL Game')
 clock = pygame.time.Clock()
 
-# sprite
-all_sprite = pygame.sprite.Group() # sprite grubu oluşturduk
-enemy = pygame.sprite.Group()
-player = Player() # player objesini yarattık
-m1 = Enemy()
-m2 = Enemy()
-
-all_sprite.add(player) # içerisine ekliyorum
-all_sprite.add(m1)
-all_sprite.add(m2)
-enemy.add(m1)
-enemy.add(m2)
-
-
-# game loop
-running = True
-while running:
-    # keep loop running at the right speed
-    clock.tick(fps)
-
-    # procces input
-    for event in pygame.event.get():
-
-        if event.type == pygame.QUIT:
-            running = False
 
 
 
 
-    # update
-    all_sprite.update()
-
-    hits = pygame.sprite.spritecollide(player, enemy, False,pygame.sprite.collide_rect)
-    if hits:
-        running = False
-
-
-    # draw / render (show)
-    screen.fill(white)
-    all_sprite.draw(screen)
-    # after drawing flip display
-    pygame.display.flip()
-
-
-pygame.quit()
