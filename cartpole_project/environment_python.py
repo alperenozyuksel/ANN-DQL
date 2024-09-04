@@ -91,7 +91,7 @@ class Enemy(pygame.sprite.Sprite):
         return self.rect.x, self.rect.y
 
 class DQLAgent:
-    def __init__(self, env):
+    def __init__(self):
         # Hiperparametreler
         self.state_size = 4 # distance (playerx-m1x) (playerx-m2x)  (playerx-m1y)  (playerx-m2y)
         self.action_size = 3 # right, left , stay
@@ -130,6 +130,8 @@ class DQLAgent:
             return
         minibatch = random.sample(self.memory, batch_size)
         for state, action, reward, next_state, done in minibatch:
+            state = np.array(state)
+            next_state = np.array(next_state)
             target = reward
             if not done:
                 target += self.gamma * np.amax(self.model.predict(next_state)[0])
@@ -284,8 +286,3 @@ pygame.init()
 screen = pygame.display.set_mode((width, height))
 pygame.display.set_caption('RL Game')
 clock = pygame.time.Clock()
-
-
-
-
-
