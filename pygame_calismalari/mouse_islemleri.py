@@ -11,10 +11,10 @@ FPS = 60
 WHITE = (255, 255, 255)
 WINDOW = pygame.display.set_mode((WIDTH, HEIGHT))
 clock = pygame.time.Clock()
-monster = pygame.image.load('monster.png')
+monster = pygame.image.load('png/monster.png')
 monster_rect = monster.get_rect()
 
-coin = pygame.image.load('coin.png')
+coin = pygame.image.load('png/coin.png')
 coin_rect = coin.get_rect()
 
 is_jumping = False

@@ -9,7 +9,7 @@ window = pygame.display.set_mode((WIDTH, HEIGHT))
 
 SPEED = 10
 
-monster = pygame.image.load('monster.png')
+monster = pygame.image.load('png/monster.png')
 monster_rect = monster.get_rect()
 monster_rect.topleft = (WIDTH/2 , HEIGHT/2)
 durum = True
