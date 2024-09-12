@@ -11,6 +11,7 @@ BLACK = (0, 0, 0)
 WINDOW = pygame.display.set_mode((WIDTH, HEIGHT))
 RED = (255, 0, 0)
 
+
 class Player(pygame.sprite.Sprite):
     def __init__(self):
         super().__init__()
@@ -36,43 +37,82 @@ class Player(pygame.sprite.Sprite):
 
 
 class Enemy(pygame.sprite.Sprite):
-    def __init__(self):
+    def __init__(self, x, y):
         super().__init__()
         self.image = pygame.image.load('png/monster.png')
         self.rect = self.image.get_rect()
-        self.rect.x = random.randint(0, WIDTH - self.rect.width)
-        self.rect.y = random.randint(0, 500)
+        self.rect.x = x
+        self.rect.y = y
+        self.speed = 2
+        self.hareket = True
 
     def update(self):
-        pass
+        if self.hareket:
+            self.rect.x += self.speed
+        if self.rect.right > WIDTH:
+            self.hareket = False
+        if not self.hareket:
+            self.rect.x -= self.speed
+        if self.rect.left < 0:
+            self.rect.x += self.speed
+            self.hareket = True
+
+        # Rastgele düşman mermisi oluşturma
+        if random.randint(1, 1000) <= 1:  # Yaklaşık %2 olasılıkla mermi at
+            enemy_bullet = EnemyBullet(self.rect.centerx, self.rect.bottom)
+            enemy_bullet_group.add(enemy_bullet)
 
 
-class Bullet(pygame.sprite.Sprite):
+class EnemyBullet(pygame.sprite.Sprite):
     def __init__(self, x, y):
         super().__init__()
-        self.image = pygame.image.load('png/bullet.png')
+        self.image = pygame.image.load('png/bullet_3.png')
         self.rect = self.image.get_rect()
         self.rect.x = x
         self.rect.y = y
         self.speed = 5
 
+    def update(self):
+        self.rect.y += self.speed
+        if self.rect.y > HEIGHT:  # Ekranın dışına çıkarsa yok edilir
+            self.kill()
 
+
+class Bullet(pygame.sprite.Sprite):
+    def __init__(self, x, y):
+        super().__init__()
+        self.image = pygame.image.load('png/bullet_3.png')
+        self.rect = self.image.get_rect()
+        self.rect.x = x
+        self.rect.y = y
+        self.speed = 5
 
     def update(self):
         self.rect.y -= self.speed
-        if self.rect.y < 0:
-            self.kill()  # Mermi ekranın dışına çıkarsa yok edilir
+        if self.rect.y < 0:  # Mermi ekranın dışına çıkarsa yok edilir
+            self.kill()
 
 
 # Gruplar
 player_group = pygame.sprite.Group()
 enemy_group = pygame.sprite.Group()
 bullet_group = pygame.sprite.Group()
+enemy_bullet_group = pygame.sprite.Group()
 
 player = Player()
-enemy = Enemy()
 player_group.add(player)
-enemy_group.add(enemy)
+
+
+
+for _ in range(10):
+    enemy = Enemy(_ * 100, 100)
+    enemy_group.add(enemy)
+    enemy1 = Enemy(_ * 100, 150)
+    enemy_group.add(enemy1)
+
+
+
+
 
 fire = False
 last_shot_time = 0  # Son ateşleme zamanı
@@ -81,7 +121,6 @@ last_shot_time = 0  # Son ateşleme zamanı
 durum = True
 
 while durum:
-
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
             durum = False
@@ -94,37 +133,33 @@ while durum:
 
     # 0.2 saniyede bir mermi atılmasına izin ver
     if key[pygame.K_SPACE] and current_time - last_shot_time > 200:
-        # Mermi oyuncunun pozisyonuna göre yaratılır
         bullet = Bullet(player.rect.centerx - 12, player.rect.y - 20)
         bullet_group.add(bullet)
         last_shot_time = current_time  # Son ateşleme zamanı güncellenir
 
-
-
+    # Çarpışma kontrolü
     for bullet in bullet_group:
-        if pygame.sprite.collide_rect(bullet, enemy):
+        if pygame.sprite.spritecollide(bullet, enemy_group, True):  # True parametresi çarpıştığında enemy'yi siler
             bullet.kill()  # Çarpışma olduğunda mermiyi yok et
-            enemy.kill()  # Düşmanı yok et
-            enemy = Enemy()
-            enemy_group.add(enemy)
 
+    for enemy_bullet in enemy_bullet_group:
+        if pygame.sprite.spritecollide(enemy_bullet, player_group, True):  # Oyuncuya çarptığında
+            enemy_bullet.kill()  # Çarpışma olduğunda düşman mermisini yok et
 
+    
 
     # Güncellemeler
     player_group.update()
     enemy_group.update()
     bullet_group.update()
+    enemy_bullet_group.update()
 
     # Çizim
     WINDOW.fill(BLACK)
     player_group.draw(WINDOW)
     enemy_group.draw(WINDOW)
     bullet_group.draw(WINDOW)
-
-    pygame.draw.rect(WINDOW, RED, player.rect, 2)  # Player hitbox
-    pygame.draw.rect(WINDOW, RED, enemy.rect, 2)  # Enemy hitbox
-    for bullet in bullet_group:
-        pygame.draw.rect(WINDOW, RED, bullet.rect, 2)  # Bullet hitbox
+    enemy_bullet_group.draw(WINDOW)
 
     pygame.display.update()
     CLOCK.tick(FPS)

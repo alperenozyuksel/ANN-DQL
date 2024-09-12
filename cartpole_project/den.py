@@ -1,5 +1,3 @@
-
-# pygame template
 import pygame
 import random
 import numpy as np
@@ -24,7 +22,6 @@ BLUE = (0, 0, 255)
 
 
 class Player(pygame.sprite.Sprite):
-    # sprite for the player
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.Surface((20, 20))
@@ -58,10 +55,7 @@ class Player(pygame.sprite.Sprite):
         return (self.rect.x, self.rect.y)
 
 
-
-
 class Enemy(pygame.sprite.Sprite):
-
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
         self.image = pygame.Surface((10, 10))
@@ -71,7 +65,6 @@ class Enemy(pygame.sprite.Sprite):
         pygame.draw.circle(self.image, WHITE, self.rect.center, self.radius)
         self.rect.x = random.randrange(0, WIDTH - self.rect.width)
         self.rect.y = random.randrange(2, 6)
-
         self.speedx = 0
         self.speedy = 6
 
@@ -91,7 +84,7 @@ class Enemy(pygame.sprite.Sprite):
 class DQLAgent:
     def __init__(self):
         # parameter / hyperparameter
-        self.state_size = 2  # distance [(playerx-m1x),(playery-m1y),(playerx-m2x),(playery-m2y)]
+        self.state_size = 2  # distance [(playerx-m1x),(playery-m1y)]
         self.action_size = 3  # right, left, no move
 
         self.gamma = 0.95
@@ -145,6 +138,51 @@ class DQLAgent:
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
+    # Sinir ağı yapısını ve ağırlıklarını görselleştirme
+    def visualize_weights(self):
+        # Her katmanın nöron sayısını almak için `units` özelliğini kullanıyoruz
+        layers = [layer.units for layer in self.model.layers if hasattr(layer, 'units')]
+
+        G = nx.DiGraph()
+
+        # İki katman arasında bağlantılar çiziliyor
+        for i in range(len(layers) - 1):
+            for j in range(layers[i]):
+                for k in range(layers[i + 1]):
+                    G.add_edge(f'Layer {i} Neuron {j}', f'Layer {i + 1} Neuron {k}')
+
+        # Grafiği görselleştir
+        plt.figure(figsize=(12, 12))
+        pos = nx.spring_layout(G)
+        nx.draw(G, pos, with_labels=True, node_size=500, font_size=8, font_color='black', node_color='skyblue')
+        plt.show()
+
+
+# Sinir Ağı Grafiğini Çizme
+def plot_network(layers, weights):
+    G = nx.DiGraph()
+
+    pos = {}
+    layer_distance = 10
+    node_distance = 3
+
+    for i, layer in enumerate(layers):
+        for j in range(layer):
+            node_id = f"L{i}_N{j}"
+            G.add_node(node_id)
+            pos[node_id] = (i * layer_distance, j * node_distance)
+
+            # Ağırlıkları kenarlar olarak ekle
+            if i > 0:
+                for k in range(layers[i - 1]):
+                    prev_node_id = f"L{i-1}_N{k}"
+                    weight = weights[i - 1][k][j]
+                    G.add_edge(prev_node_id, node_id, weight=weight)
+
+    edge_weights = [abs(G[u][v]['weight']) for u, v in G.edges()]
+    nx.draw(G, pos, with_labels=True, node_size=700, node_color="skyblue", edge_color=edge_weights, edge_cmap=plt.cm.Blues)
+    plt.show()
+
 
 class Env(pygame.sprite.Sprite):
     def __init__(self):
@@ -161,10 +199,6 @@ class Env(pygame.sprite.Sprite):
         self.total_reward = 0
         self.done = False
         self.agent = DQLAgent()
-
-        # Hata sayacını başlatıyoruz
-        self.miss_count = 0
-        self.penalty_accumulator = 0  # Toplam ceza miktarını izlemek için
 
     def findDistance(self, a, b):
         d = a - b
@@ -187,7 +221,6 @@ class Env(pygame.sprite.Sprite):
 
         return [state_list]
 
-    # reset
     def initialStates(self):
         self.all_sprite = pygame.sprite.Group()
         self.enemy = pygame.sprite.Group()
@@ -203,24 +236,18 @@ class Env(pygame.sprite.Sprite):
 
         state_list = []
 
-        # get coordinate
         player_state = self.player.getCoordinates()
         m1_state = self.m1.getCoordinates()
 
-        # find distance
         state_list.append(self.findDistance(player_state[0], m1_state[0]))
         state_list.append(self.findDistance(player_state[1], m1_state[1]))
 
-
         return [state_list]
-
-
 
     def run(self):
         state = self.initialStates()
         running = True
         batch_size = 2000
-        step_count = 0  # Adım sayısını takip et
 
         while running:
             self.reward = 1
@@ -237,7 +264,6 @@ class Env(pygame.sprite.Sprite):
             hits = pygame.sprite.spritecollide(self.player, self.enemy, False, pygame.sprite.collide_circle)
 
             if hits:
-                # Çarpışma olursa ödül ekleniyor
                 self.reward = 10
                 self.total_reward += self.reward
                 self.m1.kill()
@@ -245,59 +271,36 @@ class Env(pygame.sprite.Sprite):
                 self.all_sprite.add(self.m1)
                 self.enemy.add(self.m1)
 
-                print("Total reward: ", self.total_reward)
-
             elif self.m1.rect.top > HEIGHT:
-                # Düşman kaçarsa ceza artırılıyor
                 self.reward = -50
                 self.total_reward += self.reward
-
-                print(f"Kutuyu kaçırdın! Total reward: {self.total_reward}")
 
             self.agent.remember(state, action, self.reward, next_state, self.done)
             state = next_state
             self.agent.replay(batch_size)
             self.agent.adaptiveEGreedy()
 
-            
+            # Sinir ağını her 100 adımda bir görselleştir
+            if pygame.time.get_ticks() % 100 == 0:
+                self.agent.visualize_weights()
+
+            # Her bir sprite'ı ayrı ayrı güncelle
+            self.player.update(action)  # Sadece Player sınıfı için action gönderiyoruz
+            self.enemy.update()  # Enemy için herhangi bir argüman yok
 
             screen.fill(BLACK)
             self.all_sprite.draw(screen)
-            pygame.display.flip()
+
+            pygame.display.update()
 
         pygame.quit()
 
 
-if __name__ == "__main__":
-    env = Env()
-    liste = []
-    t = 0
-    while True:
-        t += 1
-        print("Episode: ", t)
-        liste.append(env.total_reward)
+# initialize pygame and create window
+pygame.init()
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("DQL Sinir Ağı Görselleştirme")
+clock = pygame.time.Clock()
 
-        # initialize pygame and create window
-        pygame.init()
-        screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        pygame.display.set_caption("RL Game")
-        clock = pygame.time.Clock()
-
-        env.run()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+env = Env()
+env.run()
