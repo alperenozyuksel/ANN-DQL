@@ -5,8 +5,8 @@ from collections import deque
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.optimizers import Adam
-import networkx as nx
 import matplotlib.pyplot as plt
+import networkx as nx
 
 # window size
 WIDTH = 360
@@ -19,7 +19,6 @@ BLACK = (0, 0, 0)
 RED = (255, 0, 0)  # RGB
 GREEN = (0, 255, 0)
 BLUE = (0, 0, 255)
-
 
 class Player(pygame.sprite.Sprite):
     def __init__(self):
@@ -35,14 +34,10 @@ class Player(pygame.sprite.Sprite):
 
     def update(self, action):
         self.speedx = 0
-        keystate = pygame.key.get_pressed()
-
-        if keystate[pygame.K_LEFT] or action == 0:
+        if action == 0:
             self.speedx = -7
-        elif keystate[pygame.K_RIGHT] or action == 1:
+        elif action == 1:
             self.speedx = 7
-        else:
-            self.speedx = 0
 
         self.rect.x += self.speedx
 
@@ -54,7 +49,6 @@ class Player(pygame.sprite.Sprite):
     def getCoordinates(self):
         return (self.rect.x, self.rect.y)
 
-
 class Enemy(pygame.sprite.Sprite):
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
@@ -65,13 +59,10 @@ class Enemy(pygame.sprite.Sprite):
         pygame.draw.circle(self.image, WHITE, self.rect.center, self.radius)
         self.rect.x = random.randrange(0, WIDTH - self.rect.width)
         self.rect.y = random.randrange(2, 6)
-        self.speedx = 0
         self.speedy = 6
 
     def update(self):
-        self.rect.x += self.speedx
         self.rect.y += self.speedy
-
         if self.rect.top > HEIGHT + 10:
             self.rect.x = random.randrange(0, WIDTH - self.rect.width)
             self.rect.y = random.randrange(2, 6)
@@ -80,26 +71,19 @@ class Enemy(pygame.sprite.Sprite):
     def getCoordinates(self):
         return (self.rect.x, self.rect.y)
 
-
 class DQLAgent:
     def __init__(self):
-        # parameter / hyperparameter
-        self.state_size = 2  # distance [(playerx-m1x),(playery-m1y)]
-        self.action_size = 3  # right, left, no move
-
+        self.state_size = 2
+        self.action_size = 3
         self.gamma = 0.95
         self.learning_rate = 0.001
-
-        self.epsilon = 1  # explore
+        self.epsilon = 1
         self.epsilon_decay = 0.995
         self.epsilon_min = 0.01
-
         self.memory = deque(maxlen=1000)
-
         self.model = self.build_model()
 
     def build_model(self):
-        # neural network for deep q learning
         model = Sequential()
         model.add(Dense(24, input_dim=self.state_size, activation="relu"))
         model.add(Dense(12, activation="relu"))
@@ -108,7 +92,6 @@ class DQLAgent:
         return model
 
     def remember(self, state, action, reward, next_state, done):
-        # storage
         self.memory.append((state, action, reward, next_state, done))
 
     def act(self, state):
@@ -119,72 +102,53 @@ class DQLAgent:
         return np.argmax(act_values[0])
 
     def replay(self, batch_size):
-        # training
         if len(self.memory) < batch_size:
             return
         minibatch = random.sample(self.memory, batch_size)
         for state, action, reward, next_state, done in minibatch:
             state = np.array(state)
             next_state = np.array(next_state)
-            if done:
-                target = reward
-            else:
-                target = reward + self.gamma * np.amax(self.model.predict(next_state)[0])
-            train_target = self.model.predict(state)
-            train_target[0][action] = target
-            self.model.fit(state, train_target, verbose=0)
+            target = reward if done else reward + self.gamma * np.amax(self.model.predict(next_state)[0])
+            target_f = self.model.predict(state)
+            target_f[0][action] = target
+            self.model.fit(state, target_f, verbose=0)
 
     def adaptiveEGreedy(self):
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
-    # Sinir ağı yapısını ve ağırlıklarını görselleştirme
     def visualize_weights(self):
-        # Her katmanın nöron sayısını almak için `units` özelliğini kullanıyoruz
+        # Create a graph for visualization of the network
         layers = [layer.units for layer in self.model.layers if hasattr(layer, 'units')]
-
         G = nx.DiGraph()
 
-        # İki katman arasında bağlantılar çiziliyor
+        fig, ax = plt.subplots(figsize=(10, 10))
+
+        # Pozisyonları hesapla (yani her katman ve düğüm için koordinatlar ayarla)
+        pos = {}
+        layer_width = 1.0 / (len(layers) - 1)  # Katmanlar arasında yatay mesafe
+        for i, layer_size in enumerate(layers):
+            for j in range(layer_size):
+                pos[f'L{i}N{j}'] = (i * layer_width, j / layer_size)  # Her düğümü yatayda ve dikeyde pozisyonlandır
+
+        # Iterate over layers and neurons to visualize weights
         for i in range(len(layers) - 1):
             for j in range(layers[i]):
                 for k in range(layers[i + 1]):
-                    G.add_edge(f'Layer {i} Neuron {j}', f'Layer {i + 1} Neuron {k}')
+                    weight = np.random.randn()  # Placeholder for real weights (Bunu gerçek ağırlıklarla değiştir)
+                    color = 'red' if weight > 0 else 'blue'
+                    G.add_edge(f'L{i}N{j}', f'L{i + 1}N{k}', weight=abs(weight), color=color)
 
-        # Grafiği görselleştir
-        plt.figure(figsize=(12, 12))
-        pos = nx.spring_layout(G)
-        nx.draw(G, pos, with_labels=True, node_size=500, font_size=8, font_color='black', node_color='skyblue')
+        edges = G.edges(data=True)
+        colors = [edge[2]['color'] for edge in edges]
+        weights = [edge[2]['weight'] for edge in edges]
+
+        # Draw the network
+        nx.draw(G, pos, with_labels=False, node_size=500, edge_color=colors, width=weights, ax=ax)
         plt.show()
 
 
-# Sinir Ağı Grafiğini Çizme
-def plot_network(layers, weights):
-    G = nx.DiGraph()
-
-    pos = {}
-    layer_distance = 10
-    node_distance = 3
-
-    for i, layer in enumerate(layers):
-        for j in range(layer):
-            node_id = f"L{i}_N{j}"
-            G.add_node(node_id)
-            pos[node_id] = (i * layer_distance, j * node_distance)
-
-            # Ağırlıkları kenarlar olarak ekle
-            if i > 0:
-                for k in range(layers[i - 1]):
-                    prev_node_id = f"L{i-1}_N{k}"
-                    weight = weights[i - 1][k][j]
-                    G.add_edge(prev_node_id, node_id, weight=weight)
-
-    edge_weights = [abs(G[u][v]['weight']) for u, v in G.edges()]
-    nx.draw(G, pos, with_labels=True, node_size=700, node_color="skyblue", edge_color=edge_weights, edge_cmap=plt.cm.Blues)
-    plt.show()
-
-
-class Env(pygame.sprite.Sprite):
+class Env:
     def __init__(self):
         pygame.sprite.Sprite.__init__(self)
         self.all_sprite = pygame.sprite.Group()
@@ -201,23 +165,18 @@ class Env(pygame.sprite.Sprite):
         self.agent = DQLAgent()
 
     def findDistance(self, a, b):
-        d = a - b
-        return d
+        return a - b
 
     def step(self, action):
         state_list = []
-
-        # update
         self.player.update(action)
         self.enemy.update()
 
-        # get coordinate
-        next_player_state = self.player.getCoordinates()
-        next_m1_state = self.m1.getCoordinates()
+        player_state = self.player.getCoordinates()
+        m1_state = self.m1.getCoordinates()
 
-        # find distance
-        state_list.append(self.findDistance(next_player_state[0], next_m1_state[0]))
-        state_list.append(self.findDistance(next_player_state[1], next_m1_state[1]))
+        state_list.append(self.findDistance(player_state[0], m1_state[0]))
+        state_list.append(self.findDistance(player_state[1], m1_state[1]))
 
         return [state_list]
 
@@ -235,7 +194,6 @@ class Env(pygame.sprite.Sprite):
         self.done = False
 
         state_list = []
-
         player_state = self.player.getCoordinates()
         m1_state = self.m1.getCoordinates()
 
@@ -248,7 +206,6 @@ class Env(pygame.sprite.Sprite):
         state = self.initialStates()
         running = True
         batch_size = 2000
-
         while running:
             self.reward = 1
             clock.tick(FPS)
@@ -270,37 +227,32 @@ class Env(pygame.sprite.Sprite):
                 self.m1 = Enemy()
                 self.all_sprite.add(self.m1)
                 self.enemy.add(self.m1)
+                print("Total reward: ", self.total_reward)
 
             elif self.m1.rect.top > HEIGHT:
                 self.reward = -50
                 self.total_reward += self.reward
+                print(f"Missed the box! Total reward: {self.total_reward}")
 
             self.agent.remember(state, action, self.reward, next_state, self.done)
             state = next_state
             self.agent.replay(batch_size)
             self.agent.adaptiveEGreedy()
 
-            # Sinir ağını her 100 adımda bir görselleştir
-            if pygame.time.get_ticks() % 100 == 0:
-                self.agent.visualize_weights()
-
-            # Her bir sprite'ı ayrı ayrı güncelle
-            self.player.update(action)  # Sadece Player sınıfı için action gönderiyoruz
-            self.enemy.update()  # Enemy için herhangi bir argüman yok
-
             screen.fill(BLACK)
             self.all_sprite.draw(screen)
+            pygame.display.flip()
 
-            pygame.display.update()
+            # Visualization of weights
+            self.agent.visualize_weights()
 
         pygame.quit()
 
+if __name__ == "__main__":
+    env = Env()
+    pygame.init()
+    screen = pygame.display.set_mode((WIDTH, HEIGHT))
+    pygame.display.set_caption("RL Game with Live Neural Network Visualization")
+    clock = pygame.time.Clock()
 
-# initialize pygame and create window
-pygame.init()
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("DQL Sinir Ağı Görselleştirme")
-clock = pygame.time.Clock()
-
-env = Env()
-env.run()
+    env.run()
