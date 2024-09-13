@@ -117,12 +117,15 @@ class DQLAgent:
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
 
-    def visualize_weights(self):
+    def visualize_weights(self, chosen_action=None):
         # Create a graph for visualization of the network
         layers = [layer.units for layer in self.model.layers if hasattr(layer, 'units')]
         G = nx.DiGraph()
 
         fig, ax = plt.subplots(figsize=(10, 10))
+
+        # Aksiyonlar için isimler (çıktı katmanı için)
+        action_names = ["Left", "Right", "No Move"]  # Bu aksiyonlar, çıkış katmanı nöronlarına karşılık gelir.
 
         # Pozisyonları hesapla (yani her katman ve düğüm için koordinatlar ayarla)
         pos = {}
@@ -143,8 +146,25 @@ class DQLAgent:
         colors = [edge[2]['color'] for edge in edges]
         weights = [edge[2]['weight'] for edge in edges]
 
-        # Draw the network
+        # Çıktı katmanını aksiyon isimleriyle etiketle
+        output_layer_idx = len(layers) - 1
+        for j, action_name in enumerate(action_names):
+            node_label = f'L{output_layer_idx}N{j}'
+            pos[node_label] = (output_layer_idx * layer_width, j / len(action_names))
+            if chosen_action == j:
+                nx.draw_networkx_nodes(G, pos, nodelist=[node_label], node_color="green",
+                                       node_size=700)  # Seçilen aksiyonu yeşil yap
+            else:
+                nx.draw_networkx_nodes(G, pos, nodelist=[node_label], node_color="lightblue",
+                                       node_size=500)  # Diğerlerini mavi yap
+
+            # Aksiyon isimlerini yazdır
+            ax.text(pos[node_label][0], pos[node_label][1] + 0.05, action_name, horizontalalignment='center',
+                    fontsize=12)
+
+        # Diğer düğümleri çiz
         nx.draw(G, pos, with_labels=False, node_size=500, edge_color=colors, width=weights, ax=ax)
+
         plt.show()
 
 
@@ -239,12 +259,18 @@ class Env:
             self.agent.replay(batch_size)
             self.agent.adaptiveEGreedy()
 
+            chosen_action = self.agent.act(state)  # Hangi aksiyon seçildi
+            self.agent.visualize_weights(chosen_action)  # Seçilen aksiyonu görselleştir
+
             screen.fill(BLACK)
             self.all_sprite.draw(screen)
             pygame.display.flip()
 
             # Visualization of weights
             self.agent.visualize_weights()
+
+
+
 
         pygame.quit()
 
