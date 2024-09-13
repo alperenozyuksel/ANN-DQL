@@ -5,19 +5,17 @@ from collections import deque
 from keras.models import Sequential
 from keras.layers import Dense
 from keras.optimizers import Adam
-import matplotlib.pyplot as plt
-import networkx as nx
+import cv2
 
 # window size
 WIDTH = 360
 HEIGHT = 360
-FPS = 30  # how fast game is
+FPS = 30
 
 # colors
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
-RED = (255, 0, 0)  # RGB
-GREEN = (0, 255, 0)
+RED = (255, 0, 0)
 BLUE = (0, 0, 255)
 
 class Player(pygame.sprite.Sprite):
@@ -26,8 +24,6 @@ class Player(pygame.sprite.Sprite):
         self.image = pygame.Surface((20, 20))
         self.image.fill(BLUE)
         self.rect = self.image.get_rect()
-        self.radius = 10
-        pygame.draw.circle(self.image, WHITE, self.rect.center, self.radius)
         self.rect.centerx = WIDTH / 2
         self.rect.bottom = HEIGHT - 1
         self.speedx = 0
@@ -47,6 +43,7 @@ class Player(pygame.sprite.Sprite):
             self.rect.left = 0
 
     def getCoordinates(self):
+        """Oyuncunun mevcut x ve y koordinatlarını döndürür."""
         return (self.rect.x, self.rect.y)
 
 class Enemy(pygame.sprite.Sprite):
@@ -55,8 +52,6 @@ class Enemy(pygame.sprite.Sprite):
         self.image = pygame.Surface((10, 10))
         self.image.fill(RED)
         self.rect = self.image.get_rect()
-        self.radius = 5
-        pygame.draw.circle(self.image, WHITE, self.rect.center, self.radius)
         self.rect.x = random.randrange(0, WIDTH - self.rect.width)
         self.rect.y = random.randrange(2, 6)
         self.speedy = 6
@@ -66,36 +61,36 @@ class Enemy(pygame.sprite.Sprite):
         if self.rect.top > HEIGHT + 10:
             self.rect.x = random.randrange(0, WIDTH - self.rect.width)
             self.rect.y = random.randrange(2, 6)
-            self.speedy = 3
 
     def getCoordinates(self):
+        """Düşmanın mevcut x ve y koordinatlarını döndürür."""
         return (self.rect.x, self.rect.y)
 
 class DQLAgent:
     def __init__(self):
         self.state_size = 2
         self.action_size = 3
-        self.gamma = 0.95
-        self.learning_rate = 0.001
-        self.epsilon = 1
-        self.epsilon_decay = 0.995
-        self.epsilon_min = 0.01
         self.memory = deque(maxlen=1000)
+        self.gamma = 0.95
+        self.epsilon = 1.0
+        self.epsilon_min = 0.01
+        self.epsilon_decay = 0.995
+        self.learning_rate = 0.001
         self.model = self.build_model()
 
     def build_model(self):
         model = Sequential()
-        model.add(Dense(24, input_dim=self.state_size, activation="relu"))
-        model.add(Dense(12, activation="relu"))
-        model.add(Dense(self.action_size, activation="linear"))
-        model.compile(loss="mse", optimizer=Adam(learning_rate=self.learning_rate))
+        model.add(Dense(24, input_dim=self.state_size, activation='relu'))
+        model.add(Dense(12, activation='relu'))
+        model.add(Dense(self.action_size, activation='linear'))
+        model.compile(loss='mse', optimizer=Adam(learning_rate=self.learning_rate))
         return model
 
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
 
     def act(self, state):
-        state = np.array(state)
+        state = np.array(state).reshape(1, -1)  # State'i (1, 2) şeklinde yeniden şekillendiriyoruz
         if np.random.rand() <= self.epsilon:
             return random.randrange(self.action_size)
         act_values = self.model.predict(state)
@@ -106,8 +101,8 @@ class DQLAgent:
             return
         minibatch = random.sample(self.memory, batch_size)
         for state, action, reward, next_state, done in minibatch:
-            state = np.array(state)
-            next_state = np.array(next_state)
+            state = np.array(state).reshape(1, -1)  # State ve next_state biçimlendirilmesi
+            next_state = np.array(next_state).reshape(1, -1)  # Biçimlendirilmiş
             target = reward if done else reward + self.gamma * np.amax(self.model.predict(next_state)[0])
             target_f = self.model.predict(state)
             target_f[0][action] = target
@@ -116,57 +111,6 @@ class DQLAgent:
     def adaptiveEGreedy(self):
         if self.epsilon > self.epsilon_min:
             self.epsilon *= self.epsilon_decay
-
-    def visualize_weights(self, chosen_action=None):
-        # Create a graph for visualization of the network
-        layers = [layer.units for layer in self.model.layers if hasattr(layer, 'units')]
-        G = nx.DiGraph()
-
-        fig, ax = plt.subplots(figsize=(10, 10))
-
-        # Aksiyonlar için isimler (çıktı katmanı için)
-        action_names = ["Left", "Right", "No Move"]  # Bu aksiyonlar, çıkış katmanı nöronlarına karşılık gelir.
-
-        # Pozisyonları hesapla (yani her katman ve düğüm için koordinatlar ayarla)
-        pos = {}
-        layer_width = 1.0 / (len(layers) - 1)  # Katmanlar arasında yatay mesafe
-        for i, layer_size in enumerate(layers):
-            for j in range(layer_size):
-                pos[f'L{i}N{j}'] = (i * layer_width, j / layer_size)  # Her düğümü yatayda ve dikeyde pozisyonlandır
-
-        # Iterate over layers and neurons to visualize weights
-        for i in range(len(layers) - 1):
-            for j in range(layers[i]):
-                for k in range(layers[i + 1]):
-                    weight = np.random.randn()  # Placeholder for real weights (Bunu gerçek ağırlıklarla değiştir)
-                    color = 'red' if weight > 0 else 'blue'
-                    G.add_edge(f'L{i}N{j}', f'L{i + 1}N{k}', weight=abs(weight), color=color)
-
-        edges = G.edges(data=True)
-        colors = [edge[2]['color'] for edge in edges]
-        weights = [edge[2]['weight'] for edge in edges]
-
-        # Çıktı katmanını aksiyon isimleriyle etiketle
-        output_layer_idx = len(layers) - 1
-        for j, action_name in enumerate(action_names):
-            node_label = f'L{output_layer_idx}N{j}'
-            pos[node_label] = (output_layer_idx * layer_width, j / len(action_names))
-            if chosen_action == j:
-                nx.draw_networkx_nodes(G, pos, nodelist=[node_label], node_color="green",
-                                       node_size=700)  # Seçilen aksiyonu yeşil yap
-            else:
-                nx.draw_networkx_nodes(G, pos, nodelist=[node_label], node_color="lightblue",
-                                       node_size=500)  # Diğerlerini mavi yap
-
-            # Aksiyon isimlerini yazdır
-            ax.text(pos[node_label][0], pos[node_label][1] + 0.05, action_name, horizontalalignment='center',
-                    fontsize=12)
-
-        # Diğer düğümleri çiz
-        nx.draw(G, pos, with_labels=False, node_size=500, edge_color=colors, width=weights, ax=ax)
-
-        plt.show()
-
 
 class Env:
     def __init__(self):
@@ -183,6 +127,10 @@ class Env:
         self.total_reward = 0
         self.done = False
         self.agent = DQLAgent()
+
+        # OpenCV penceresini başlat
+        self.img_height, self.img_width = 600, 800
+        self.img = np.zeros((self.img_height, self.img_width, 3), dtype=np.uint8)
 
     def findDistance(self, a, b):
         return a - b
@@ -225,7 +173,7 @@ class Env:
     def run(self):
         state = self.initialStates()
         running = True
-        batch_size = 2000
+        batch_size = 1000
         while running:
             self.reward = 1
             clock.tick(FPS)
@@ -259,20 +207,67 @@ class Env:
             self.agent.replay(batch_size)
             self.agent.adaptiveEGreedy()
 
-            chosen_action = self.agent.act(state)  # Hangi aksiyon seçildi
-            self.agent.visualize_weights(chosen_action)  # Seçilen aksiyonu görselleştir
-
+            # PyGame ekranı güncelleme
             screen.fill(BLACK)
             self.all_sprite.draw(screen)
             pygame.display.flip()
 
-            # Visualization of weights
-            self.agent.visualize_weights()
-
-
-
+            # OpenCV ile ağırlık görselleştirme
+            self.visualize_weights_with_opencv(action)
 
         pygame.quit()
+
+    def visualize_weights_with_opencv(self, current_action):
+        # Ağın katmanlarındaki ağırlıkları çek
+        weights = self.agent.model.get_weights()
+
+        # Görselleştirme için boş bir resim oluştur
+        self.img_height, self.img_width = 800, 1000  # Pencereyi büyüttük
+        self.img = np.zeros((self.img_height, self.img_width, 3), dtype=np.uint8)
+        layer_spacing = self.img_width // (len(weights) // 2 + 1)
+        neuron_spacing = self.img_height // (max([w.shape[0] for w in weights[::2]]) + 1)
+
+        # Katmanların sayısı ve her katmandaki nöronların sayısı
+        layer_sizes = [weights[i].shape[0] for i in range(0, len(weights), 2)]
+        layer_sizes.append(weights[-2].shape[1])  # Son katmanın çıkış boyutu
+
+        # Katmanları çiz
+        for i, size in enumerate(layer_sizes[:-1]):
+            next_size = layer_sizes[i + 1]
+
+            # Katmandaki her nöron için
+            for j in range(size):
+                x1, y1 = (i + 1) * layer_spacing, self.img_height - (j + 1) * neuron_spacing
+                cv2.circle(self.img, (x1, y1), 15, (255, 255, 255), -1)  # Nöronları beyaz yuvarlakla göster
+
+                # Bir sonraki katmandaki her nöron için bağlantı çiz
+                for k in range(next_size):
+                    x2, y2 = (i + 2) * layer_spacing, self.img_height - (k + 1) * neuron_spacing
+
+                    # Ağırlık değeri
+                    weight = weights[2 * i][j, k]  # Ağırlıkları çekiyoruz
+
+                    # Ağırlık kalınlık ve renk (negatif mavi, pozitif kırmızı)
+                    thickness = max(1, int(2 * np.abs(weight)))  # Kalınlık için minimum 1
+                    color = (0, 0, 255) if weight > 0 else (255, 0, 0)  # Kırmızı pozitif, mavi negatif
+
+                    cv2.line(self.img, (x1, y1), (x2, y2), color, thickness)
+
+            # Çıkış nöronlarını çiz
+            for j in range(layer_sizes[-1]):
+                x1, y1 = (len(layer_sizes)) * layer_spacing, self.img_height - (j + 1) * neuron_spacing
+                # Aktif eylemi gösteren yeşil renk
+                color = (0, 255, 0) if j == current_action else (128, 128, 128)  # Aktif eylem yeşil, diğerleri gri
+                cv2.circle(self.img, (x1, y1), 15, color, -1)  # Çıkış nöronlarını renklendir
+
+                # Nöron isimlerini ekle
+                cv2.putText(self.img, str(j), (x1 - 5, y1 + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1,
+                            cv2.LINE_AA)
+
+        # Ağırlık çizimlerini göster
+        cv2.imshow('Neural Network Weights', self.img)
+        cv2.waitKey(1)  # 1 milisaniye bekler, bu sayede oyun döngüsünü engellemez
+
 
 if __name__ == "__main__":
     env = Env()
