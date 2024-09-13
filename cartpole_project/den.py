@@ -173,7 +173,7 @@ class Env:
     def run(self):
         state = self.initialStates()
         running = True
-        batch_size = 1000
+        batch_size = 100000
         while running:
             self.reward = 1
             clock.tick(FPS)
@@ -222,9 +222,12 @@ class Env:
         weights = self.agent.model.get_weights()
 
         # Görselleştirme için boş bir resim oluştur
-        self.img_height, self.img_width = 800, 1000  # Pencereyi büyüttük
+        self.img_height, self.img_width = 800, 1200  # Pencereyi genişlettik
         self.img = np.zeros((self.img_height, self.img_width, 3), dtype=np.uint8)
-        layer_spacing = self.img_width // (len(weights) // 2 + 1)
+
+        # Katmanlar arası boşluk hesaplaması
+        num_layers = len(weights) // 2
+        layer_spacing = self.img_width // (num_layers + 2)
         neuron_spacing = self.img_height // (max([w.shape[0] for w in weights[::2]]) + 1)
 
         # Katmanların sayısı ve her katmandaki nöronların sayısı
@@ -237,12 +240,14 @@ class Env:
 
             # Katmandaki her nöron için
             for j in range(size):
-                x1, y1 = (i + 1) * layer_spacing, self.img_height - (j + 1) * neuron_spacing
+                x1, y1 = (i + 1) * layer_spacing, (
+                            self.img_height - (size - 1) * neuron_spacing) // 2 + j * neuron_spacing
                 cv2.circle(self.img, (x1, y1), 15, (255, 255, 255), -1)  # Nöronları beyaz yuvarlakla göster
 
                 # Bir sonraki katmandaki her nöron için bağlantı çiz
                 for k in range(next_size):
-                    x2, y2 = (i + 2) * layer_spacing, self.img_height - (k + 1) * neuron_spacing
+                    x2, y2 = (i + 2) * layer_spacing, (
+                                self.img_height - (next_size - 1) * neuron_spacing) // 2 + k * neuron_spacing
 
                     # Ağırlık değeri
                     weight = weights[2 * i][j, k]  # Ağırlıkları çekiyoruz
@@ -253,16 +258,19 @@ class Env:
 
                     cv2.line(self.img, (x1, y1), (x2, y2), color, thickness)
 
-            # Çıkış nöronlarını çiz
-            for j in range(layer_sizes[-1]):
-                x1, y1 = (len(layer_sizes)) * layer_spacing, self.img_height - (j + 1) * neuron_spacing
-                # Aktif eylemi gösteren yeşil renk
-                color = (0, 255, 0) if j == current_action else (128, 128, 128)  # Aktif eylem yeşil, diğerleri gri
-                cv2.circle(self.img, (x1, y1), 15, color, -1)  # Çıkış nöronlarını renklendir
+        # Çıkış nöronlarını çiz
+        action_names = ["Sol", "Sag", "Aksiyon Yok"]
+        output_x = (len(layer_sizes)) * layer_spacing
+        for j in range(layer_sizes[-1]):
+            y1 = (self.img_height - (layer_sizes[-1] - 1) * neuron_spacing) // 2 + j * neuron_spacing
+            # Aktif eylemi gösteren yeşil renk
+            color = (0, 255, 0) if j == current_action else (128, 128, 128)  # Aktif eylem yeşil, diğerleri gri
+            cv2.circle(self.img, (output_x, y1), 15, color, -1)  # Çıkış nöronlarını renklendir
 
-                # Nöron isimlerini ekle
-                cv2.putText(self.img, str(j), (x1 - 5, y1 + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 1,
-                            cv2.LINE_AA)
+            # Nöron isimlerini ekle (beyaz renkte) ve biraz daha sağa kaydır
+            cv2.putText(self.img, action_names[j], (output_x + 15, y1 + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+                        (255, 255, 255), 1,
+                        cv2.LINE_AA)
 
         # Ağırlık çizimlerini göster
         cv2.imshow('Neural Network Weights', self.img)
