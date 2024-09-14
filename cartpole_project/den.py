@@ -242,7 +242,9 @@ class Env:
             for j in range(size):
                 x1, y1 = (i + 1) * layer_spacing, (
                             self.img_height - (size - 1) * neuron_spacing) // 2 + j * neuron_spacing
-                cv2.circle(self.img, (x1, y1), 15, (255, 255, 255), -1)  # Nöronları beyaz yuvarlakla göster
+                # Giriş nöronları için yeşil renk
+                color = (0, 255, 0) if i == 0 else (255, 255, 255)
+                cv2.circle(self.img, (x1, y1), 15, color, -1)  # Nöronları renkli yuvarlakla göster
 
                 # Bir sonraki katmandaki her nöron için bağlantı çiz
                 for k in range(next_size):
@@ -268,7 +270,7 @@ class Env:
             cv2.circle(self.img, (output_x, y1), 15, color, -1)  # Çıkış nöronlarını renklendir
 
             # Nöron isimlerini ekle (beyaz renkte) ve biraz daha sağa kaydır
-            cv2.putText(self.img, action_names[j], (output_x + 15, y1 + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
+            cv2.putText(self.img, action_names[j], (output_x + 20, y1 + 5), cv2.FONT_HERSHEY_SIMPLEX, 0.5,
                         (255, 255, 255), 1,
                         cv2.LINE_AA)
 
